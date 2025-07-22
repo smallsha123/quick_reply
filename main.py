@@ -80,16 +80,30 @@ class QuickReplyAutoInsert(QWidget):
         self.groups = [(row[0], row[1]) for row in self.cursor.fetchall()]
 
     def load_replies(self):
-        self.cursor.execute('SELECT type, text, image_path, group_id FROM replies')
+        self.cursor.execute('SELECT id, type, text, image_path, group_id, sort FROM replies ORDER BY group_id, sort ASC, id ASC')
         rows = self.cursor.fetchall()
         self.replies = []
         for row in rows:
-            group_id = row[3]
+            group_id = row[4]
             group_name = self.get_group_name_by_id(group_id)
-            if row[0] == 'image':
-                self.replies.append({"type": "image", "image_path": row[2], "group_id": group_id, "group": group_name})
+            if row[1] == 'image':
+                self.replies.append({
+                    "id": row[0],
+                    "type": "image",
+                    "image_path": row[3],
+                    "group_id": group_id,
+                    "group": group_name,
+                    "sort": row[5]
+                })
             else:
-                self.replies.append({"type": "text", "text": row[1], "group_id": group_id, "group": group_name})
+                self.replies.append({
+                    "id": row[0],
+                    "type": "text",
+                    "text": row[2],
+                    "group_id": group_id,
+                    "group": group_name,
+                    "sort": row[5]
+                })
 
     def get_group_id_by_name(self, group_name):
         self.cursor.execute('SELECT id FROM group_hotkeys WHERE group_name=?', (group_name,))
@@ -291,6 +305,7 @@ class QuickReplyAutoInsert(QWidget):
         self.update_groups()
 
     def update_buttons(self):
+        import functools
         # 清空旧按钮和布局
         while self.button_layout.count():
             item = self.button_layout.takeAt(0)
@@ -304,8 +319,10 @@ class QuickReplyAutoInsert(QWidget):
                     sub_widget = sub_item.widget()
                     if sub_widget:
                         sub_widget.setParent(None)
-        # 只显示当前分组 id 下的回复
-        for idx, reply in enumerate([r for r in self.replies if r.get("group_id") == self.current_group]):
+        # 只显示当前分组 id 下的回复，按sort排序
+        group_replies = [r for r in self.replies if r.get("group_id") == self.current_group]
+        group_replies.sort(key=lambda r: r.get("sort", 0))
+        for idx, reply in enumerate(group_replies):
             group = reply.get("group", "默认")
             if reply.get("type", "text") == "image":
                 btn = QPushButton(f"[{group}] [图片] {reply['image_path']}")
@@ -313,15 +330,33 @@ class QuickReplyAutoInsert(QWidget):
             else:
                 btn = QPushButton(f"[{group}] {reply['text']}")
                 btn.clicked.connect(lambda checked, r=reply['text']: self.set_current_reply(r))
+            # sort输入框
+            from PyQt6.QtWidgets import QLineEdit
+            sort_edit = QLineEdit(str(reply.get("sort", 0)))
+            sort_edit.setFixedWidth(40)
+            sort_edit.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            sort_edit.setToolTip("排序，数字越小越靠前")
+            sort_edit.reply_id = reply["id"]
+            def save_sort(edit, rid):
+                try:
+                    val = int(edit.text())
+                except Exception:
+                    return
+                self.cursor.execute('UPDATE replies SET sort=? WHERE id=?', (val, rid))
+                self.conn.commit()
+                self.update_groups()
+                self.update_buttons()
+            sort_edit.editingFinished.connect(functools.partial(save_sort, sort_edit, reply["id"]))
             # 编辑按钮
-            edit_btn = QPushButton("编辑")
             global_idx = self.replies.index(reply)
+            edit_btn = QPushButton("编辑")
             edit_btn.clicked.connect(lambda checked, i=global_idx: self.edit_reply(i))
             # 删除按钮
             del_btn = QPushButton("删除")
             del_btn.clicked.connect(lambda checked, i=global_idx: self.delete_reply(i))
             row_layout = QHBoxLayout()
             row_layout.addWidget(btn)
+            row_layout.addWidget(sort_edit)
             row_layout.addWidget(edit_btn)
             row_layout.addWidget(del_btn)
             self.button_layout.addLayout(row_layout)
@@ -623,9 +658,11 @@ class QuickReplyAutoInsert(QWidget):
 
     def send_group(self, group_id):
         print("触发分组热键", group_id)
-        # 依次发送该分组id下所有快捷回复
+        # 依次发送该分组id下所有快捷回复，按sort排序
         import time
-        for reply in [r for r in self.replies if r.get("group_id") == group_id]:
+        group_replies = [r for r in self.replies if r.get("group_id") == group_id]
+        group_replies.sort(key=lambda r: r.get("sort", 0))
+        for reply in group_replies:
             if reply.get("type", "text") == "image":
                 self.send_image(reply["image_path"])
             else:
