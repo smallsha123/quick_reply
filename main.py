@@ -378,29 +378,97 @@ class QuickReplyAutoInsert(QWidget):
         # pyautogui.keyUp('command')
 
     def add_reply(self):
-        group_id = self.current_group  # 当前分组id
-        group = self.get_group_name_by_id(group_id)
-        type_choice, ok_type = QInputDialog.getItem(self, "选择类型", "类型：", ["文本", "图片"], 0, False)
-        if not ok_type:
-            return
-        if type_choice == "文本":
-            text, ok = QInputDialog.getText(self, "添加快捷回复", "输入回复内容：")
-            if ok and text:
-                reply = {"type": "text", "text": text, "group_id": group_id, "group": group}
-                self.replies.append(reply)
-                self.save_reply(reply)
-                self.update_groups()
-                self.update_buttons()
-                self.register_hotkeys()
-        else:
-            file_path, _ = QFileDialog.getOpenFileName(self, "选择图片", "", "Images (*.png *.jpg *.jpeg *.bmp *.gif)")
-            if file_path:
-                reply = {"type": "image", "image_path": file_path, "group_id": group_id, "group": group}
-                self.replies.append(reply)
-                self.save_reply(reply)
-                self.update_groups()
-                self.update_buttons()
-                self.register_hotkeys()
+        from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QRadioButton, QLineEdit, QPushButton, QLabel, QFileDialog
+        from PyQt6.QtCore import Qt
+        class AddReplyDialog(QDialog):
+            def __init__(self, parent=None):
+                super().__init__(parent)
+                self.setWindowTitle("添加快捷回复")
+                self.resize(360, 160)
+                self.setAttribute(Qt.WidgetAttribute.WA_InputMethodEnabled, True)
+                layout = QVBoxLayout()
+                self.type_text = QRadioButton("文本")
+                self.type_image = QRadioButton("图片")
+                self.type_text.setChecked(True)
+                type_layout = QHBoxLayout()
+                type_layout.addWidget(QLabel("类型："))
+                type_layout.addWidget(self.type_text)
+                type_layout.addWidget(self.type_image)
+                layout.addLayout(type_layout)
+                # 文本输入
+                self.text_input = QLineEdit()
+                self.text_input.setPlaceholderText("输入回复内容")
+                self.text_input.setAttribute(Qt.WidgetAttribute.WA_InputMethodEnabled, True)
+                layout.addWidget(self.text_input)
+                # 图片选择
+                self.image_path = None
+                self.image_btn = QPushButton("选择图片")
+                self.image_label = QLabel("")
+                self.image_btn.hide()
+                self.image_label.hide()
+                layout.addWidget(self.image_btn)
+                layout.addWidget(self.image_label)
+                # 按类型切换输入
+                def on_type_change():
+                    if self.type_text.isChecked():
+                        self.text_input.show()
+                        self.image_btn.hide()
+                        self.image_label.hide()
+                        self.text_input.setFocus()
+                    else:
+                        self.text_input.hide()
+                        self.image_btn.show()
+                        self.image_label.show()
+                self.type_text.toggled.connect(on_type_change)
+                self.type_image.toggled.connect(on_type_change)
+                # 选择图片
+                def choose_image():
+                    file_path, _ = QFileDialog.getOpenFileName(self, "选择图片", "", "Images (*.png *.jpg *.jpeg *.bmp *.gif)")
+                    if file_path:
+                        self.image_path = file_path
+                        self.image_label.setText(file_path)
+                self.image_btn.clicked.connect(choose_image)
+                # 确定/取消
+                btn_layout = QHBoxLayout()
+                ok_btn = QPushButton("确定")
+                cancel_btn = QPushButton("取消")
+                btn_layout.addWidget(ok_btn)
+                btn_layout.addWidget(cancel_btn)
+                layout.addLayout(btn_layout)
+                self.setLayout(layout)
+                ok_btn.clicked.connect(self.accept)
+                cancel_btn.clicked.connect(self.reject)
+            def showEvent(self, event):
+                super().showEvent(event)
+                if self.type_text.isChecked():
+                    self.text_input.setFocus()
+            def get_result(self):
+                if self.type_text.isChecked():
+                    return "文本", self.text_input.text()
+                else:
+                    return "图片", self.image_path
+        # 弹窗
+        dlg = AddReplyDialog(self)
+        if dlg.exec() == QDialog.DialogCode.Accepted:
+            type_choice, content = dlg.get_result()
+            group_id = self.current_group
+            group = self.get_group_name_by_id(group_id)
+            if type_choice == "文本":
+                if content:
+                    reply = {"type": "text", "text": content, "group_id": group_id, "group": group}
+                    self.replies.append(reply)
+                    self.save_reply(reply)
+                    self.update_groups()
+                    self.update_buttons()
+                    self.register_hotkeys()
+            else:
+                if content:
+                    reply = {"type": "image", "image_path": content, "group_id": group_id, "group": group}
+                    self.replies.append(reply)
+                    self.save_reply(reply)
+                    self.update_groups()
+                    self.update_buttons()
+                    self.register_hotkeys()
 
     def save_reply(self, reply):
         group_id = reply.get("group_id")
