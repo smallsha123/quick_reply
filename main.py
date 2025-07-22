@@ -61,7 +61,6 @@ class QuickReplyAutoInsert(QWidget):
                 hotkey TEXT
             )
         ''')
-        # 新增sort字段，兼容老表
         self.cursor.execute('''
             CREATE TABLE IF NOT EXISTS replies (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -69,15 +68,9 @@ class QuickReplyAutoInsert(QWidget):
                 text TEXT,
                 image_path TEXT,
                 group_id INTEGER,
-                sort INTEGER DEFAULT 0,
                 FOREIGN KEY(group_id) REFERENCES group_hotkeys(id)
             )
         ''')
-        # 检查是否已有sort字段
-        self.cursor.execute("PRAGMA table_info(replies)")
-        columns = [row[1] for row in self.cursor.fetchall()]
-        if 'sort' not in columns:
-            self.cursor.execute('ALTER TABLE replies ADD COLUMN sort INTEGER DEFAULT 0')
         # 确保有默认分组
         self.cursor.execute('INSERT OR IGNORE INTO group_hotkeys (group_name, hotkey) VALUES (?, ?)', ("默认", None))
         self.conn.commit()
@@ -87,16 +80,16 @@ class QuickReplyAutoInsert(QWidget):
         self.groups = [(row[0], row[1]) for row in self.cursor.fetchall()]
 
     def load_replies(self):
-        self.cursor.execute('SELECT type, text, image_path, group_id, sort FROM replies ORDER BY group_id, sort ASC, id ASC')
+        self.cursor.execute('SELECT type, text, image_path, group_id FROM replies')
         rows = self.cursor.fetchall()
         self.replies = []
         for row in rows:
             group_id = row[3]
             group_name = self.get_group_name_by_id(group_id)
             if row[0] == 'image':
-                self.replies.append({"type": "image", "image_path": row[2], "group_id": group_id, "group": group_name, "sort": row[4]})
+                self.replies.append({"type": "image", "image_path": row[2], "group_id": group_id, "group": group_name})
             else:
-                self.replies.append({"type": "text", "text": row[1], "group_id": group_id, "group": group_name, "sort": row[4]})
+                self.replies.append({"type": "text", "text": row[1], "group_id": group_id, "group": group_name})
 
     def get_group_id_by_name(self, group_name):
         self.cursor.execute('SELECT id FROM group_hotkeys WHERE group_name=?', (group_name,))
@@ -311,10 +304,8 @@ class QuickReplyAutoInsert(QWidget):
                     sub_widget = sub_item.widget()
                     if sub_widget:
                         sub_widget.setParent(None)
-        # 只显示当前分组 id 下的回复，按sort排序
-        group_replies = [r for r in self.replies if r.get("group_id") == self.current_group]
-        group_replies.sort(key=lambda r: r.get("sort", 0))
-        for idx, reply in enumerate(group_replies):
+        # 只显示当前分组 id 下的回复
+        for idx, reply in enumerate([r for r in self.replies if r.get("group_id") == self.current_group]):
             group = reply.get("group", "默认")
             if reply.get("type", "text") == "image":
                 btn = QPushButton(f"[{group}] [图片] {reply['image_path']}")
@@ -326,21 +317,12 @@ class QuickReplyAutoInsert(QWidget):
             edit_btn = QPushButton("编辑")
             global_idx = self.replies.index(reply)
             edit_btn.clicked.connect(lambda checked, i=global_idx: self.edit_reply(i))
-            # 上移/下移按钮
-            up_btn = QPushButton("↑")
-            down_btn = QPushButton("↓")
-            up_btn.setFixedWidth(28)
-            down_btn.setFixedWidth(28)
-            up_btn.clicked.connect(lambda checked, i=global_idx: self.move_reply(i, -1))
-            down_btn.clicked.connect(lambda checked, i=global_idx: self.move_reply(i, 1))
             # 删除按钮
             del_btn = QPushButton("删除")
             del_btn.clicked.connect(lambda checked, i=global_idx: self.delete_reply(i))
             row_layout = QHBoxLayout()
             row_layout.addWidget(btn)
             row_layout.addWidget(edit_btn)
-            row_layout.addWidget(up_btn)
-            row_layout.addWidget(down_btn)
             row_layout.addWidget(del_btn)
             self.button_layout.addLayout(row_layout)
 
@@ -527,16 +509,12 @@ class QuickReplyAutoInsert(QWidget):
 
     def save_reply(self, reply):
         group_id = reply.get("group_id")
-        # 新增时sort为当前分组最大+1
-        self.cursor.execute('SELECT MAX(sort) FROM replies WHERE group_id=?', (group_id,))
-        max_sort = self.cursor.fetchone()[0]
-        new_sort = (max_sort + 1) if max_sort is not None else 0
         if reply["type"] == "image":
-            self.cursor.execute('INSERT INTO replies (type, image_path, group_id, sort) VALUES (?, ?, ?, ?)',
-                                (reply["type"], reply["image_path"], group_id, new_sort))
+            self.cursor.execute('INSERT INTO replies (type, image_path, group_id) VALUES (?, ?, ?)',
+                                (reply["type"], reply["image_path"], group_id))
         else:
-            self.cursor.execute('INSERT INTO replies (type, text, group_id, sort) VALUES (?, ?, ?, ?)',
-                                (reply["type"], reply["text"], group_id, new_sort))
+            self.cursor.execute('INSERT INTO replies (type, text, group_id) VALUES (?, ?, ?)',
+                                (reply["type"], reply["text"], group_id))
         self.conn.commit()
         print(f"已添加回复到数据库: {reply}")
 
@@ -643,34 +621,11 @@ class QuickReplyAutoInsert(QWidget):
         row = self.cursor.fetchone()
         return row[0] if row else None
 
-    def move_reply(self, idx, direction):
-        # direction: -1=上移, 1=下移
-        reply = self.replies[idx]
-        group_id = reply.get("group_id")
-        group_replies = [r for r in self.replies if r.get("group_id") == group_id]
-        group_replies.sort(key=lambda r: r.get("sort", 0))
-        pos = group_replies.index(reply)
-        new_pos = pos + direction
-        if new_pos < 0 or new_pos >= len(group_replies):
-            return  # 超界
-        other = group_replies[new_pos]
-        # 交换sort
-        reply_sort = reply.get("sort", 0)
-        other_sort = other.get("sort", 0)
-        # 更新数据库
-        self.cursor.execute('UPDATE replies SET sort=? WHERE type=? AND group_id=? AND (text=? OR image_path=?)', (other_sort, reply["type"], group_id, reply.get("text", ""), reply.get("image_path", "")))
-        self.cursor.execute('UPDATE replies SET sort=? WHERE type=? AND group_id=? AND (text=? OR image_path=?)', (reply_sort, other["type"], group_id, other.get("text", ""), other.get("image_path", "")))
-        self.conn.commit()
-        self.update_groups()
-        self.update_buttons()
-
     def send_group(self, group_id):
         print("触发分组热键", group_id)
-        # 依次发送该分组id下所有快捷回复，按sort排序
+        # 依次发送该分组id下所有快捷回复
         import time
-        group_replies = [r for r in self.replies if r.get("group_id") == group_id]
-        group_replies.sort(key=lambda r: r.get("sort", 0))
-        for reply in group_replies:
+        for reply in [r for r in self.replies if r.get("group_id") == group_id]:
             if reply.get("type", "text") == "image":
                 self.send_image(reply["image_path"])
             else:
