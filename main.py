@@ -337,7 +337,19 @@ class QuickReplyAutoInsert(QWidget):
 
     def set_current_reply(self, text):
         self.current_reply = text
-        QMessageBox.information(self, "已选中", f"当前快捷回复: {text}")
+        # 弹出短暂提示（toast），1秒后自动消失
+        from PyQt6.QtWidgets import QLabel
+        from PyQt6.QtCore import QTimer
+        toast = QLabel(f"已复制: {text}", self)
+        toast.setStyleSheet("background: #333; color: #fff; border-radius: 6px; padding: 8px 18px; font-size: 15px;")
+        toast.setWindowFlags(Qt.WindowType.ToolTip)
+        toast.adjustSize()
+        # 居中显示在主窗口
+        x = self.geometry().center().x() - toast.width() // 2
+        y = self.geometry().center().y() - toast.height() // 2
+        toast.move(x, y)
+        toast.show()
+        QTimer.singleShot(1000, toast.close)
 
     def send_reply(self, text):
         # 防抖：0.8秒内只响应一次
