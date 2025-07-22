@@ -313,11 +313,16 @@ class QuickReplyAutoInsert(QWidget):
             else:
                 btn = QPushButton(f"[{group}] {reply['text']}")
                 btn.clicked.connect(lambda checked, r=reply['text']: self.set_current_reply(r))
-            del_btn = QPushButton("删除")
+            # 编辑按钮
+            edit_btn = QPushButton("编辑")
             global_idx = self.replies.index(reply)
+            edit_btn.clicked.connect(lambda checked, i=global_idx: self.edit_reply(i))
+            # 删除按钮
+            del_btn = QPushButton("删除")
             del_btn.clicked.connect(lambda checked, i=global_idx: self.delete_reply(i))
             row_layout = QHBoxLayout()
             row_layout.addWidget(btn)
+            row_layout.addWidget(edit_btn)
             row_layout.addWidget(del_btn)
             self.button_layout.addLayout(row_layout)
 
@@ -337,10 +342,30 @@ class QuickReplyAutoInsert(QWidget):
 
     def set_current_reply(self, text):
         self.current_reply = text
+        # 判断是否为图片路径
+        import os
+        from PyQt6.QtGui import QImage, QGuiApplication
+        import pyperclip
+        is_image = False
+        if isinstance(text, str) and os.path.isfile(text):
+            ext = os.path.splitext(text)[1].lower()
+            if ext in ['.png', '.jpg', '.jpeg', '.bmp', '.gif']:
+                is_image = True
+        if is_image:
+            image = QImage(text)
+            if not image.isNull():
+                clipboard = QGuiApplication.clipboard()
+                clipboard.setImage(image)
+                toast_msg = f"图片已复制到剪贴板"
+            else:
+                toast_msg = f"图片读取失败"
+        else:
+            pyperclip.copy(text)
+            toast_msg = f"已复制: {text}"
         # 弹出短暂提示（toast），1秒后自动消失
         from PyQt6.QtWidgets import QLabel
         from PyQt6.QtCore import QTimer
-        toast = QLabel(f"已复制: {text}", self)
+        toast = QLabel(toast_msg, self)
         toast.setStyleSheet("background: #333; color: #fff; border-radius: 6px; padding: 8px 18px; font-size: 15px;")
         toast.setWindowFlags(Qt.WindowType.ToolTip)
         toast.adjustSize()
@@ -550,6 +575,51 @@ class QuickReplyAutoInsert(QWidget):
         self.update_groups()
         self.update_buttons()
         self.register_hotkeys()
+
+    def edit_reply(self, idx):
+        from PyQt6.QtWidgets import QInputDialog, QFileDialog
+        reply = self.replies[idx]
+        group_id = reply.get("group_id")
+        group = reply.get("group", "默认")
+        # 先查出原始id
+        if reply.get("type") == "image":
+            old_path = reply["image_path"]
+            self.cursor.execute('SELECT id FROM replies WHERE type=? AND image_path=? AND group_id=?', (reply["type"], old_path, group_id))
+        else:
+            old_text = reply["text"]
+            self.cursor.execute('SELECT id FROM replies WHERE type=? AND text=? AND group_id=?', (reply["type"], old_text, group_id))
+        row = self.cursor.fetchone()
+        reply_id = row[0] if row else None
+        if not reply_id:
+            print("未找到原始回复，无法编辑")
+            return
+        if reply.get("type") == "image":
+            file_path, _ = QFileDialog.getOpenFileName(self, "选择新图片", "", "Images (*.png *.jpg *.jpeg *.bmp *.gif)")
+            if file_path:
+                # 更新内存
+                reply["image_path"] = file_path
+                # 更新数据库
+                self.cursor.execute('UPDATE replies SET image_path=? WHERE id=?', (file_path, reply_id))
+                self.conn.commit()
+                self.update_groups()
+                self.update_buttons()
+        else:
+            text, ok = QInputDialog.getText(self, "编辑回复", "修改回复内容：", text=reply.get("text", ""))
+            if ok and text:
+                reply["text"] = text
+                self.cursor.execute('UPDATE replies SET text=? WHERE id=?', (text, reply_id))
+                self.conn.commit()
+                self.update_groups()
+                self.update_buttons()
+
+    def get_reply_id(self, reply):
+        # 通过内容和分组查找id
+        if reply.get("type") == "image":
+            self.cursor.execute('SELECT id FROM replies WHERE type=? AND image_path=? AND group_id=?', (reply["type"], reply["image_path"], reply["group_id"]))
+        else:
+            self.cursor.execute('SELECT id FROM replies WHERE type=? AND text=? AND group_id=?', (reply["type"], reply["text"], reply["group_id"]))
+        row = self.cursor.fetchone()
+        return row[0] if row else None
 
     def send_group(self, group_id):
         print("触发分组热键", group_id)
