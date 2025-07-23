@@ -551,6 +551,7 @@ class QuickReplyAutoInsert(QWidget):
             self.cursor.execute('INSERT INTO replies (type, text, group_id) VALUES (?, ?, ?)',
                                 (reply["type"], reply["text"], group_id))
         self.conn.commit()
+        reply["id"] = self.cursor.lastrowid  # 加这一行，保证reply有id
         print(f"已添加回复到数据库: {reply}")
 
     def toggle_on_top(self):
@@ -580,11 +581,10 @@ class QuickReplyAutoInsert(QWidget):
         clipboard.setImage(image)
         print("图片已写入剪贴板，等待同步...")
         import time
-        # time.sleep(0.5)
+        time.sleep(0.5)
         import subprocess
         applescript = 'tell application "System Events" to keystroke "v" using command down'
         subprocess.run(['osascript', '-e', applescript])
-        time.sleep(0.5)
         self.send_enter()
         
         
