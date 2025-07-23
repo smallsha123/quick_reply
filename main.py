@@ -211,6 +211,7 @@ class QuickReplyAutoInsert(QWidget):
         self.group_list.clear()
         self.group_list.setSpacing(4)
         self.group_list.setStyleSheet("QListWidget::item:selected { background: transparent; }")
+        
         for group_id, group in self.groups:
             item = QListWidgetItem()
             item.setData(Qt.ItemDataRole.UserRole, group_id)
