@@ -191,15 +191,15 @@ class QuickReplyAutoInsert(QWidget):
                 self._registered_hotkeys.add(reg_hotkey)
 
     def init_ui(self):
-        # 右上角置顶图标按钮
-        top_btn_layout = QHBoxLayout()
-        top_btn_layout.addStretch()
+        # 左上角置顶图标按钮（分组区上方）
         self.top_icon_btn = QPushButton()
         self.top_icon_btn.setFixedSize(28, 28)
         self.update_top_icon()
         self.top_icon_btn.clicked.connect(self.toggle_on_top)
-        top_btn_layout.addWidget(self.top_icon_btn)
-        self.layout.addLayout(top_btn_layout)
+        top_btn_row = QHBoxLayout()
+        top_btn_row.addWidget(self.top_icon_btn)
+        top_btn_row.addStretch()
+        self.group_area.insertLayout(0, top_btn_row)
         # 其余 UI
         self.button_layout = QVBoxLayout()
         self.update_buttons()
