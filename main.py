@@ -76,7 +76,7 @@ class QuickReplyAutoInsert(QWidget):
         self.conn.commit()
 
     def load_groups(self):
-        self.cursor.execute('SELECT id, group_name FROM group_hotkeys')
+        self.cursor.execute('SELECT id, group_name FROM group_hotkeys ORDER BY id ASC')
         self.groups = [(row[0], row[1]) for row in self.cursor.fetchall()]
 
     def load_replies(self):
