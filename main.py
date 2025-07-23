@@ -24,11 +24,16 @@ class QuickReplyAutoInsert(QWidget):
         self.current_group = None
         self.setWindowTitle("快捷回复（自动插入）")
         self.is_on_top = False  # 默认不置顶
-        # self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, self.is_on_top)  # 初始化时不置顶
+        self.reply_area_expanded = True  # 新增属性，控制回复区块显示
+        self._expanded_width = None  # 记录展开时窗口宽度
         self.main_layout = QHBoxLayout()
         self.setLayout(self.main_layout)
         # 分组区（列表+添加按钮）
         self.group_area = QVBoxLayout()
+        # 分组区最大宽度限制
+        self.group_area_widget = QWidget()
+        self.group_area_widget.setLayout(self.group_area)
+        self.group_area_widget.setMaximumWidth(360)  # 可根据实际调整
         self.group_list = QListWidget()
         self.group_list.setMinimumWidth(340)
         self.group_list.setMaximumWidth(550)
@@ -39,10 +44,18 @@ class QuickReplyAutoInsert(QWidget):
         self.add_group_btn.setStyleSheet("font-size: 14px;")
         self.add_group_btn.clicked.connect(self.add_group)
         self.group_area.addWidget(self.add_group_btn)
-        self.main_layout.addLayout(self.group_area, 1)
+        self.main_layout.addWidget(self.group_area_widget, 1)
+        # 展开/收缩按钮放在分组区和快捷回复区之间
+        self.toggle_reply_area_btn = QPushButton("<")
+        self.toggle_reply_area_btn.setFixedSize(28, 60)
+        self.toggle_reply_area_btn.setToolTip("收起/展开快捷回复区块")
+        self.toggle_reply_area_btn.clicked.connect(self.toggle_reply_area)
+        self.main_layout.addWidget(self.toggle_reply_area_btn, 0)
         # 右侧回复区
+        self.reply_area_widget = QWidget()
         self.layout = QVBoxLayout()
-        self.main_layout.addLayout(self.layout, 4)
+        self.reply_area_widget.setLayout(self.layout)
+        self.main_layout.addWidget(self.reply_area_widget, 4)
         self.init_db()
         self.load_replies()
         self.load_group_hotkeys()
@@ -688,6 +701,28 @@ class QuickReplyAutoInsert(QWidget):
         self.cursor.execute('SELECT id FROM group_hotkeys WHERE group_name=?', ("默认",))
         row = self.cursor.fetchone()
         return row[0] if row else None
+
+    def toggle_reply_area(self):
+        self.reply_area_expanded = not self.reply_area_expanded
+        self.reply_area_widget.setVisible(self.reply_area_expanded)
+        if self.reply_area_expanded:
+            self.toggle_reply_area_btn.setText("<")
+            # 恢复窗口宽度限制
+            self.setMinimumWidth(0)
+            self.setMaximumWidth(16777215)
+            if self._expanded_width:
+                self.resize(self._expanded_width, self.height())
+        else:
+            self.toggle_reply_area_btn.setText(">")
+            if not self._expanded_width:
+                self._expanded_width = self.width()
+            group_width = self.group_area_widget.width()
+            btn_width = self.toggle_reply_area_btn.width()
+            margin = 50
+            shrink_width = group_width + btn_width + margin
+            self.setMinimumWidth(shrink_width)
+            self.setMaximumWidth(shrink_width)
+            self.resize(shrink_width, self.height())
 
 if __name__ == "__main__":
     import sys
