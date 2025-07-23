@@ -5,7 +5,7 @@ a = Analysis(
     ['../main.py'],
     pathex=['..'],
     binaries=[],
-    datas=[('/Users/smallshaxiaoche/miniconda3/envs/quick/lib/python3.12/site-packages/certifi/cacert.pem', 'certifi')],
+    datas=[('/Users/smallshaxiaoche/miniconda3/envs/quick/lib/python3.12/site-packages/certifi/cacert.pem', 'certifi'), ('../quick_replies.db', '.')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},

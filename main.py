@@ -15,6 +15,7 @@ import functools
 from PyQt6.QtGui import QImage, QPixmap, QGuiApplication, QIcon
 import sqlite3
 from PyQt6.QtWidgets import QPushButton
+import logging
 
 # 移除自动删除数据库的代码
 
@@ -723,6 +724,23 @@ class QuickReplyAutoInsert(QWidget):
             self.setMinimumWidth(shrink_width)
             self.setMaximumWidth(shrink_width)
             self.resize(shrink_width, self.height())
+
+# 启动时设置日志
+log_path = os.path.expanduser('~/Desktop/quick_error.log')
+logging.basicConfig(filename=log_path, level=logging.DEBUG, format='%(asctime)s %(levelname)s %(message)s')
+
+def excepthook(exc_type, exc_value, exc_traceback):
+    import traceback
+    logging.error("未捕获异常:", exc_info=(exc_type, exc_value, exc_traceback))
+    # 也可以弹窗提示
+    try:
+        from PyQt6.QtWidgets import QMessageBox
+        msg = ''.join(traceback.format_exception(exc_type, exc_value, exc_traceback))
+        QMessageBox.critical(None, "程序异常", f"程序发生错误，已写入桌面日志\n{exc_value}")
+    except Exception:
+        pass
+
+sys.excepthook = excepthook
 
 if __name__ == "__main__":
     import sys

@@ -25,6 +25,7 @@ pyinstaller  \
     --name "Quick" \
     --icon tb.icns \
     --add-data "${CERT_PATH}:certifi" \
+    --add-data "../quick_replies.db:." \
     --paths ".." \
     ../main.py
 
