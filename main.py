@@ -331,9 +331,8 @@ class QuickReplyAutoInsert(QWidget):
                 btn = QPushButton(f"[{group}] {reply['text']}")
                 btn.clicked.connect(lambda checked, r=reply['text']: self.set_current_reply(r))
             # 设置按钮最大宽度和自动换行
-            btn.setMinimumWidth(180)  # 可根据实际调整
-            btn.setMaximumWidth(320)  # 可根据实际调整
-            btn.setWordWrap(True)  # 让文本自动换行
+            btn.setMinimumWidth(300)  # 可根据实际调整
+            btn.setMaximumWidth(300)  # 可根据实际调整
             btn.setStyleSheet("text-align: left; padding: 6px 8px; font-size: 14px; white-space: normal;")
             # sort输入框
             from PyQt6.QtWidgets import QLineEdit
