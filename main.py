@@ -277,7 +277,15 @@ class QuickReplyAutoInsert(QWidget):
 
     def register_group_hotkeys(self):
         import keyboard
-        if not hasattr(self, '_registered_group_hotkeys'):
+        # 先清除已注册的分组热键，避免重复
+        if hasattr(self, '_registered_group_hotkeys'):
+            for hotkey in self._registered_group_hotkeys:
+                try:
+                    keyboard.remove_hotkey(hotkey)
+                except Exception:
+                    pass
+            self._registered_group_hotkeys.clear()
+        else:
             self._registered_group_hotkeys = set()
         for group, hotkey in self.group_hotkeys.items():
             if hotkey and hotkey not in self._registered_group_hotkeys:
@@ -298,6 +306,7 @@ class QuickReplyAutoInsert(QWidget):
             self.group_hotkeys[group] = hotkey
             self.save_group_hotkey(group, hotkey)
             self.update_groups()
+            self.register_group_hotkeys()
 
     def on_group_selected(self, item):
         group_id = item.data(Qt.ItemDataRole.UserRole)
