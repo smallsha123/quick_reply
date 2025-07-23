@@ -121,7 +121,7 @@ class QuickReplyAutoInsert(QWidget):
 
     def save_group_hotkey(self, group, hotkey):
         print(f"保存分组热键: {group} -> {hotkey}")
-        self.cursor.execute('REPLACE INTO group_hotkeys (group_name, hotkey) VALUES (?, ?)', (group, hotkey))
+        self.cursor.execute('UPDATE group_hotkeys SET hotkey=? WHERE group_name=?', (hotkey, group))
         self.conn.commit()
 
     def add_group(self):
@@ -282,7 +282,8 @@ class QuickReplyAutoInsert(QWidget):
         for group, hotkey in self.group_hotkeys.items():
             if hotkey and hotkey not in self._registered_group_hotkeys:
                 print(f"注册分组热键: {hotkey} -> {group}")
-                keyboard.add_hotkey(hotkey, self.send_current_group)
+                group_id = self.get_group_id_by_name(group)
+                keyboard.add_hotkey(hotkey, lambda gid=group_id: self.send_group(gid))
                 self._registered_group_hotkeys.add(hotkey)
 
     def send_current_group(self):
