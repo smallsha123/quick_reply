@@ -443,11 +443,11 @@ class QuickReplyAutoInsert(QWidget):
     def send_reply(self, text):
         # 防抖：0.8秒内只响应一次
         now = time.time()
-        if hasattr(self, '_last_send_time') and now - self._last_send_time < 0.8:
+        if hasattr(self, '_last_send_time') and now - self._last_send_time < 3:
             print("防抖：忽略本次触发")
             return
         self._last_send_time = now
-        print("热键触发，内容：", text)
+        # print("热键触发，内容：", text)
         pyperclip.copy(text)
         # 检查剪贴板内容，最多等1秒
         for _ in range(20):
@@ -457,7 +457,7 @@ class QuickReplyAutoInsert(QWidget):
         else:
             print("警告：剪贴板内容未及时同步，取消粘贴")
             return
-        print("剪贴板内容：", pyperclip.paste())
+        # print("剪贴板内容：", pyperclip.paste())
         # 用 AppleScript 方式粘贴 command+v
         import subprocess
         applescript = 'tell application "System Events" to keystroke "v" using command down'
